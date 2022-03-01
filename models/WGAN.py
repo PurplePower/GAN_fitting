@@ -16,29 +16,15 @@ class WGAN(BaseGAN):
         super()._setup_models(D, G, d_optimizer, g_optimizer)
 
     def _build_discriminator(self) -> keras.Sequential:
-        # return keras.Sequential([
-        #     layers.Dense(32, input_shape=(self.input_dim,)), layers.LeakyReLU(),
-        #     layers.Dense(16), layers.LeakyReLU(),
-        #     layers.Dense(1)
-        # ])
         return keras.Sequential([
-            layers.Dense(64, input_shape=(self.input_dim,)), layers.LeakyReLU(),
-            layers.Dense(48), layers.LeakyReLU(),
-            layers.Dense(32), layers.LeakyReLU(),
+            layers.Dense(32, input_shape=(self.input_dim,)), layers.LeakyReLU(),
             layers.Dense(16), layers.LeakyReLU(),
             layers.Dense(1)
         ])
 
     def _build_generator(self) -> keras.Sequential:
-        # return keras.Sequential([
-        #     layers.Dense(32, use_bias=False, input_shape=(self.latent_factor,)), layers.LeakyReLU(),
-        #     layers.Dense(16), layers.LeakyReLU(),
-        #     layers.Dense(self.input_dim)
-        # ])
         return keras.Sequential([
-            layers.Dense(64, use_bias=False, input_shape=(self.latent_factor,)), layers.LeakyReLU(),
-            layers.Dense(48), layers.LeakyReLU(),
-            layers.Dense(32), layers.LeakyReLU(),
+            layers.Dense(32, use_bias=False, input_shape=(self.latent_factor,)), layers.LeakyReLU(),
             layers.Dense(16), layers.LeakyReLU(),
             layers.Dense(self.input_dim)
         ])

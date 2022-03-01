@@ -1,11 +1,10 @@
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from tensorflow import keras
 import numpy as np
 import itertools
 from pathlib import Path
 
-from models import GAN, BaseGAN
+from models import WGAN, BaseGAN
 from data.datamaker import *
 from metrics.JensenShannonDivergence import JensenShannonDivergence as JSD
 from utils.common import empty_directory
@@ -29,7 +28,7 @@ def run_single_case(path, case, clear_before_run=True, **kwargs):
 
     # build model
     D, G = structure(input_dim, latent_factor)
-    model = GAN(D=D, G=G, **model_params)
+    model = WGAN(D=D, G=G, **model_params)
 
     sampler = kwargs['sampler']
     sampler.set_path(case_path)
@@ -63,14 +62,6 @@ def run_single_case(path, case, clear_before_run=True, **kwargs):
 
 
 if __name__ == '__main__':
-    """
-    test covers:
-        learning rate combination
-        model structure
-        latent factor size
-        alternative learning rounds
-        (default) SGD optimizers
-    """
     parent_path = Path('htest')
 
     # model hyper-params
@@ -79,14 +70,14 @@ if __name__ == '__main__':
     structures = [level_1_structure, level_2_structure]
 
     # training params
-    learning_rate_combinations = [(1e-3, 1e-3), (1e-2, 1e-2), (1e-3, 5e-3)]
+    learning_rate_combinations = [(1e-2, 1e-2), (1e-3, 1e-3)]
     latent_factors = [5]
     dg_train_ratios = [1, 3]
     epochs = 10000
     batch_size = 64
 
     #
-    repeat_times = 5  # cases per hparam
+    repeat_times = 3  # cases per hparam
     sample_interval = 20
 
     x, sampler = make_ring_dots(1024, path='')  # one dataset for all trainings
@@ -94,12 +85,12 @@ if __name__ == '__main__':
     for (lr_d, lr_g), latent_factor, structure, dg_r in itertools.product(learning_rate_combinations, latent_factors,
                                                                           structures, dg_train_ratios):
         D, G = structure(input_dim, latent_factor)
-        model = GAN(input_dim, latent_factor, D=D, G=G,
+        model = WGAN(input_dim, latent_factor, D=D, G=G,
                     d_optimizer=default_opt(lr_d), g_optimizer=default_opt(lr_g))
 
         # pack training and model information
         info = Info(
-            gan_type='GAN',
+            gan_type='WGAN',
             input_dim=input_dim, latent_factor=latent_factor, opt=default_opt.__name__,
             lr_d=lr_d, lr_g=lr_g, batch_sz=batch_size, dg_r=dg_r, struct=STRUCTURE_NAMES[structure],
             trained_epochs=epochs

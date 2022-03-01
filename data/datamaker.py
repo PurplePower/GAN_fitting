@@ -2,6 +2,7 @@ import matplotlib.patches
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import make_blobs
+from typing import Union
 
 from visualizers.BaseSampler import BaseSampler
 
@@ -23,7 +24,6 @@ def make_line_points(n_samples: int, k: float = 1, b: float = 0, path=DEFAULT_SA
             border = np.array([-2, 2])
             plt.plot(border, border * k + b, 'r')
             plt.title(f'Generated at epoch {epoch}')
-            plt.savefig(f'{self.path}/d_{epoch}.png')
 
     return np.array([x, y], dtype=np.float32).T, _sampler()
 
@@ -57,7 +57,6 @@ def make_cross_line_points(n_samples: int, k: float = 1, b: float = 0, path=DEFA
             plt.plot(border, border * (-k) + b, 'r')
 
             plt.title(f'Generated at epoch {epoch}')
-            plt.savefig(f'{self.path}/d_{epoch}.png')
 
     return np.stack([x, y]).astype(np.float32).T, _sampler()
 
@@ -82,12 +81,11 @@ def make_single_blob_points(n_samples: int, path=DEFAULT_SAVE_PATH):
             ax.add_patch(rect)
 
             plt.title(f'Generated at epoch {epoch}')
-            plt.savefig(f'{self.path}/d_{epoch}.png')
 
     return np.array([x, y], dtype=np.float32).T, _sampler()
 
 
-def make_ring_dots(n_samples: int, radius=2, path=DEFAULT_SAVE_PATH):
+def make_ring_dots(n_samples: Union[int, list, np.ndarray], radius=2, path=DEFAULT_SAVE_PATH):
     centers = np.array([
         (radius * np.cos(theta := 2 * np.pi * (i / 8)), radius * np.sin(theta))
         for i in range(8)
@@ -100,10 +98,9 @@ def make_ring_dots(n_samples: int, radius=2, path=DEFAULT_SAVE_PATH):
             self.figure = plt.figure()
 
         def call(self, xx, epoch):
-            plt.scatter(xx[:, 0], xx[:, 1])
+            plt.scatter(xx[:, 0], xx[:, 1], 10)
             plt.scatter(centers[:, 0], centers[:, 1], marker='*')
 
             plt.title(f'Generated at epoch {epoch}')
-            plt.savefig(f'{self.path}/d_{epoch}.png')
 
     return np.array(x, dtype=np.float32), _sampler()

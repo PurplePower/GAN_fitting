@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 
 class BaseSampler(abc.ABC):
 
-    def __init__(self, path, name=''):
-        self.path = path
+    def __init__(self, path=None, name=''):
+        self.path = path    # if None, figure not saved
         self.name = name
         self.figure = None
         self.axes = None
@@ -25,6 +25,8 @@ class BaseSampler(abc.ABC):
         plt.figure(self.figure.number)   # set current figure
         plt.clf()
         self.call(x, epoch)
+        if self.path is not None:
+            plt.savefig(f'{self.path}/d_{epoch}.png')
         pass
 
     @abc.abstractmethod

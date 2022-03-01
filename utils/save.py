@@ -34,3 +34,4 @@ def load_optimizer(path, filename, model) -> keras.optimizers.Optimizer:
 
     opt.set_weights(data['weights'])
     return opt
+
