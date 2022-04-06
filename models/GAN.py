@@ -97,11 +97,7 @@ class GAN(BaseGAN):
     def train(self, dataset: Union[tf.Tensor, np.ndarray], epochs, batch_size=32, sample_interval=20,
               sampler: BaseSampler = None, sample_number=300, metrics=[],
               dg_train_ratio=1):
-        if isinstance(dataset, np.ndarray):
-            dataset = tf.constant(dataset)
-        elif not isinstance(dataset, tf.Tensor):
-            raise Exception(f'Currently not supported dataset as {type(dataset)}')
-
+        dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples = dataset.shape[0]
         n_batch = n_samples // batch_size

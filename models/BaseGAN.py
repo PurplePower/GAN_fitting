@@ -47,14 +47,34 @@ class BaseGAN(abc.ABC):
     def _build_g_optimizer(self) -> tf.keras.optimizers.Optimizer:
         pass
 
-    def print_epoch(self, epoch, epochs, cost, d_loss, g_loss):
-        print(f'Epoch {epoch + self.trained_epoch}/{epochs + self.trained_epoch} cost {cost:.2f} s, '
-              f'D loss: {d_loss:.6f}, G loss: {g_loss:.6f}')
+    ###############################################
+    #       Training
+    ###############################################
 
     @abc.abstractmethod
     def train(self, dataset, epochs, batch_size=32, sample_interval=20,
               sampler: BaseSampler = None, sample_number=300, metrics=[]) -> Tuple[np.ndarray, np.ndarray]:
         pass
+
+    @staticmethod
+    def _check_dataset(dataset):
+        """
+        Check dataset type and try converting to tf.Tensor.
+        :param dataset:
+        :return:
+        """
+        if isinstance(dataset, np.ndarray):
+            return tf.constant(dataset)
+        elif not isinstance(dataset, tf.Tensor):
+            raise Exception(f'Currently not supported dataset as {type(dataset)}')
+
+    def print_epoch(self, epoch, epochs, cost, d_loss, g_loss):
+        print(f'Epoch {epoch + self.trained_epoch}/{epochs + self.trained_epoch} cost {cost:.2f} s, '
+              f'D loss: {d_loss:.6f}, G loss: {g_loss:.6f}')
+
+    ################################################
+    #       Prediction and Generation
+    ################################################
 
     def generate(self, n_samples=None, seed=None):
         """
@@ -68,12 +88,16 @@ class BaseGAN(abc.ABC):
             if seed_size[1] != self.latent_factor:
                 raise Exception(
                     f'Incompatible latent factor size: expected {self.latent_factor}, got {seed_size[1]}')
-            return self.generator(seed)
+            return self.generator(seed, training=False)
         elif n_samples is not None:
             seed = tf.random.normal([n_samples, self.latent_factor])
-            return self.generator(seed)
+            return self.generator(seed, training=False)
         else:
             raise Exception('n_sample and seed can not be both None')
+
+    ################################################
+    #       Loading and Saving
+    ################################################
 
     MAIN_MODEL_FILE = 'main_model'
     G_OPT_FILE = 'g_opt'
@@ -99,8 +123,10 @@ class BaseGAN(abc.ABC):
         save.save_optimizer(d_opt, path, self.D_OPT_FILE)
         save.save_optimizer(g_opt, path, self.G_OPT_FILE)
 
-        d_model.save(path / self.D_MODEL_DIR)
-        g_model.save(path / self.G_MODEL_DIR)
+        if d_model:
+            d_model.save(path / self.D_MODEL_DIR)
+        if g_model:
+            g_model.save(path / self.G_MODEL_DIR)
 
         # restore tf objects
         self.discriminator, self.d_optimizer = d_model, d_opt
@@ -125,16 +151,3 @@ class BaseGAN(abc.ABC):
         model.g_optimizer = save.load_optimizer(path, cls.G_OPT_FILE, model=model.generator)
 
         return model
-
-    def to_json(self):
-        d_json = json.loads(self.discriminator.to_json())
-        g_json = json.loads(self.generator.to_json())
-        info = {
-            'latent_factor': self.latent_factor,
-            'input_dim': self.input_dim,
-            'trained_epoch': self.trained_epoch,
-            'discriminator': d_json,
-            'generator': g_json,
-            'd_opt': self.d_optimizer.get_config(),
-            'g_opt': self.g_optimizer.get_config(),
-        }

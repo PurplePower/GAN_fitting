@@ -1,13 +1,11 @@
 import numpy as np
 import tensorflow as tf
-from models import GAN, LSGAN, WGAN
+from models import *
 from data.datamaker import make_ring_dots
 
 if __name__ == '__main__':
-    model_types = [GAN, LSGAN, WGAN]
+    model_types = [fGAN]
     x, sampler = make_ring_dots(128)  # for simple test
-    dataset = tf.data.Dataset.from_tensor_slices(x)
-
 
     for cls in model_types:
         path = f'./tmp/{cls.__name__}'
@@ -15,7 +13,7 @@ if __name__ == '__main__':
         model = cls(input_dim=2)
         x_test = np.random.normal(0, 1, size=(4, model.latent_factor))
 
-        model.train(dataset, 5, sampler=None)
+        model.train(x, 5, sampler=None)
 
         # keep current weights
         cur_weights = [

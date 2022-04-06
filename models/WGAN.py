@@ -99,10 +99,7 @@ class WGAN(BaseGAN):
 
     def train(self, dataset: Union[tf.Tensor, np.array], epochs, batch_size=32, sample_interval=20,
               sampler: BaseSampler = None, sample_number=300, dg_train_ratio=1, metrics=[]):
-        if isinstance(dataset, np.ndarray):
-            dataset = tf.constant(dataset)
-        elif not isinstance(dataset, tf.Tensor):
-            raise Exception(f'Currently not supported dataset as {type(dataset)}')
+        dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples, n_batch = dataset.shape[0], dataset.shape[0] // batch_size
         losses, metric_values = [], [[] for m in metrics]

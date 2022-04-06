@@ -2,4 +2,8 @@
 /.idea/
 /log/
 /htest/
+**/tmp/
 /.*
+*.pyc
+/profiles/
+/RemoteSystemsTempFiles/

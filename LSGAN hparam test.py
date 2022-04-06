@@ -4,13 +4,12 @@ import numpy as np
 import itertools
 from pathlib import Path
 
-from models import WGAN, BaseGAN
+from models import LSGAN, BaseGAN
 from data.datamaker import *
 from metrics.JensenShannonDivergence import JensenShannonDivergence as JSD
 from utils.common import empty_directory
 from utils.structures import *
 from utils.runtests import *
-from visualizers.plots import plot_2d_density
 
 
 def run_single_case(path, case, clear_before_run=True, **kwargs):
@@ -29,7 +28,7 @@ def run_single_case(path, case, clear_before_run=True, **kwargs):
 
     # build model
     D, G = structure(input_dim, latent_factor)
-    model = WGAN(D=D, G=G, **model_params)
+    model = LSGAN(D=D, G=G, **model_params)
 
     sampler = kwargs['sampler']
     sampler.set_path(case_path)
@@ -54,10 +53,6 @@ def run_single_case(path, case, clear_before_run=True, **kwargs):
     plt.title('Jensen-Shannon Divergence')
     plt.legend(['JSD'])
     plt.savefig(case_path / 'JSD.png')
-
-    plt.clf()
-    plot_2d_density(model, 16 * 1024)
-    plt.savefig(case_path / 'Density 2D.png')
 
     # write done case-config
     info.done = True
@@ -90,7 +85,7 @@ if __name__ == '__main__':
     for (lr_d, lr_g), latent_factor, structure, dg_r in itertools.product(learning_rate_combinations, latent_factors,
                                                                           structures, dg_train_ratios):
         D, G = structure(input_dim, latent_factor)
-        model = WGAN(input_dim, latent_factor, D=D, G=G,
+        model = LSGAN(input_dim, latent_factor, D=D, G=G,
                     d_optimizer=default_opt(lr_d), g_optimizer=default_opt(lr_g))
 
         # pack training and model information
