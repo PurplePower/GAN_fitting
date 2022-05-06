@@ -97,19 +97,22 @@ class WGAN(BaseGAN):
         self.d_optimizer.apply_gradients(zip(d_grads, discriminator.trainable_variables))
         return d_loss
 
-    def train(self, dataset: Union[tf.Tensor, np.array], epochs, batch_size=32, sample_interval=20,
-              sampler: BaseSampler = None, sample_number=300, dg_train_ratio=1, metrics=[]):
+    def train(
+            self, dataset: Union[tf.Tensor, np.array], epochs, batch_size=64,
+            sample_interval=20, sampler: BaseSampler = None, sample_number=300,
+            dg_train_ratio=1, metrics=None
+    ):
         dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples, n_batch = dataset.shape[0], dataset.shape[0] // batch_size
+        metrics = metrics or []
         losses, metric_values = [], [[] for m in metrics]
 
         batch_getter = random_batch_getter(dataset, batch_size)
 
         for epoch in range(epochs):
             start = time.time()
-            kwargs = {'generator': self.generator, 'discriminator': self.discriminator,
-                      'model': self, 'dataset': dataset}
+            kwargs = {'model': self, 'dataset': dataset, 'epoch': epoch}
             total_g_loss = total_d_loss = 0.0
 
             for i in range(n_batch):
@@ -129,6 +132,14 @@ class WGAN(BaseGAN):
             losses.append((total_d_loss / n_batch, total_g_loss / n_batch))
             self.print_epoch(epoch, epochs, time.time() - start, total_d_loss / n_batch, total_g_loss / n_batch)
 
+        # last sample
+        sampler(self.generator(seed), epochs - 1)
         self.trained_epoch += epochs
 
         return np.array(losses), np.array(metric_values)
+
+        ####################################################
+        #   save and load
+        ####################################################
+
+        # using inherited config save and load

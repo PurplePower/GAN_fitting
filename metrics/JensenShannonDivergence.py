@@ -28,9 +28,7 @@ class JensenShannonDivergence(BaseMetric):
         probs /= np.sum(probs)
         return probs
 
-    def __call__(self, *args, **kwargs):
-        model: BaseGAN = kwargs['model']
-        dataset = kwargs['dataset']
+    def __call__(self, model, dataset, *args, **kwargs):
         assert model and dataset is not None
 
         n_dim = dataset.shape[1]

@@ -8,7 +8,7 @@ from data.datamaker import make_ring_dots
 if __name__ == '__main__':
     # load a model then draw 2d density
 
-    path = '../pics/wgan/model'
+    path = '../htest/advanced/WGAN_dopt=SGD(0.001)_gopt=SGD(0.001)_bs=64_lf=5_struct=2/case-0/model'
     model = WGAN.load(path)
 
     n_samples = 256 * 1024

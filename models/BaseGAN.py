@@ -1,6 +1,7 @@
 import abc
 import tensorflow as tf
 from tensorflow import keras
+from keras import Sequential
 import numpy as np
 from pathlib import Path
 import pickle
@@ -15,6 +16,7 @@ class BaseGAN(abc.ABC):
 
     def __init__(self, input_dim, latent_factor):
         assert input_dim > 0 and latent_factor > 0
+        # dimensionality of generated points, or input to D
         self.input_dim = input_dim
         self.latent_factor = latent_factor
         self.generator = None
@@ -53,7 +55,7 @@ class BaseGAN(abc.ABC):
 
     @abc.abstractmethod
     def train(self, dataset, epochs, batch_size=32, sample_interval=20,
-              sampler: BaseSampler = None, sample_number=300, metrics=[]) -> Tuple[np.ndarray, np.ndarray]:
+              sampler: BaseSampler = None, sample_number=300, metrics=None) -> Tuple[np.ndarray, np.ndarray]:
         pass
 
     @staticmethod
@@ -94,6 +96,15 @@ class BaseGAN(abc.ABC):
             return self.generator(seed, training=False)
         else:
             raise Exception('n_sample and seed can not be both None')
+
+    def estimate_prob(self, x, sample_points) -> np.ndarray:
+        """
+        Estimate discriminator's output at sample points.
+        :param x: sometimes needed to estimate probabilities.
+        :param sample_points: points where probability is estimated.
+        :return:
+        """
+        return np.array(self.generator(sample_points, training=False))
 
     ################################################
     #       Loading and Saving
@@ -149,5 +160,38 @@ class BaseGAN(abc.ABC):
         model.generator = keras.models.load_model(path / cls.G_MODEL_DIR)
         model.d_optimizer = save.load_optimizer(path, cls.D_OPT_FILE, model=model.discriminator)
         model.g_optimizer = save.load_optimizer(path, cls.G_OPT_FILE, model=model.generator)
+
+        return model
+
+    def get_config(self):
+        """
+        Return a dict that contains all necessary information to build a model like self.
+        This dict can be passed to cls.from_config() to get a model with newly inited weights.
+        :return:
+        """
+        return {
+            'name': self.name,
+            'input_dim': self.input_dim, 'latent_factor': self.latent_factor,
+            'generator': self.generator.get_config() if self.generator else '',
+            'discriminator': self.discriminator.get_config() if self.discriminator else '',
+            'g_optimizer': self.g_optimizer.get_config(),
+            'd_optimizer': self.d_optimizer.get_config() if self.d_optimizer else '',
+        }
+
+    @classmethod
+    def from_config(cls, config: dict):
+        """
+        Construct a model with params from config, with newly inited weights.
+        :param config:
+        :return:
+        """
+        assert config['name'] == cls.__name__
+        model = cls(config['input_dim'], config['latent_factor'])
+        model.generator = Sequential.from_config(config['generator'])
+        if config['discriminator']:
+            model.discriminator = Sequential.from_config(config['discriminator'])
+        model.g_optimizer = keras.optimizers.get(config['g_optimizer']['name']).from_config(config['g_optimizer'])
+        if config['d_optimizer']:
+            model.d_optimizer = keras.optimizers.get(config['d_optimizer']['name']).from_config(config['d_optimizer'])
 
         return model

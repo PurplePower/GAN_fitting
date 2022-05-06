@@ -2,12 +2,12 @@ import time
 from typing import Tuple
 from pathlib import Path
 import pickle
-import json
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow import keras
 from keras.layers import Dense, LeakyReLU
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 from tensorflow import math
 
 from models import BaseGAN
@@ -16,18 +16,41 @@ from utils.common import random_batch_getter
 from utils import save
 
 
+class CustomStairBandwidth(LearningRateSchedule):
+    def __init__(self, stairs, furthest_bw):
+        self.stairs = stairs
+        self.furthest_bw = furthest_bw
+
+    def __call__(self, step):
+        for edge, bw in self.stairs:
+            if step <= edge:
+                return bw
+        return self.furthest_bw
+
+    def get_config(self):
+        return {
+            'name': self.__class__.__name__,
+            'stairs': self.stairs,
+            'furthest_bw': self.furthest_bw
+        }
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(config['stairs'], config['furthest_bw'])
+
+
 class KernelGAN(BaseGAN):
     def __init__(self, input_dim, latent_factor=5,
                  D=None, G=None, d_optimizer=None, g_optimizer=None,
                  bandwidth=0.5, bandwidth_updater=None):
         super().__init__(input_dim, latent_factor)
         super()._setup_models(D, G, d_optimizer, g_optimizer)
-        self.mvn = tfp.distributions.MultivariateNormalDiag(
-            loc=tf.zeros([input_dim]), scale_diag=tf.ones([input_dim]))
+        # self.mvn = tfp.distributions.MultivariateNormalDiag(
+        #     loc=tf.zeros([input_dim]), scale_diag=tf.ones([input_dim]))
         self.bandwidth = bandwidth
         self.bandwidth_updater = bandwidth_updater
         self.regularizer = 0
-        self._kernel_constant = 1 / tf.sqrt((2 * np.pi) ** latent_factor)
+        self._kernel_constant = 1 / tf.sqrt((2 * np.pi) ** min(latent_factor, 5))
 
     def _build_discriminator(self) -> keras.Sequential:
         return None
@@ -43,12 +66,11 @@ class KernelGAN(BaseGAN):
         return None
 
     def _build_g_optimizer(self) -> tf.keras.optimizers.Optimizer:
-        # TODO: SGD or Adam
         return keras.optimizers.SGD(1e-3)
 
-    ###############################
+    #################################################
     #    kernel estimations
-    ###############################
+    #################################################
 
     @tf.function
     def _kernel(self, x):
@@ -131,11 +153,11 @@ class KernelGAN(BaseGAN):
     def _estimate_prob2(self, repeated, tiled, n):
         t = self._kernel((repeated - tiled) / self.bandwidth)  # of shape (n*n, 1)
         t = tf.reshape(t, [n, n])
-        return tf.reduce_mean(t, axis=1)
+        return tf.reduce_mean(t, axis=1) * tf.math.pow(1/self.bandwidth, self.input_dim)
 
-    ###############################
+    ###################################################
     #    training
-    ###############################
+    ###################################################
 
     @tf.function
     def _train_step(self, x_real):
@@ -149,14 +171,18 @@ class KernelGAN(BaseGAN):
 
         # only generator is updated
         grads = tape.gradient(loss, generator.trainable_variables)
-        self.d_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
+        self.g_optimizer.apply_gradients(zip(grads, generator.trainable_variables))
         return loss
 
-    def train(self, dataset, epochs, batch_size=32, sample_interval=20, sampler: BaseSampler = None, sample_number=300,
-              metrics=[]) -> Tuple[np.ndarray, np.ndarray]:
+    def train(
+            self, dataset, epochs, batch_size=64,
+            sample_interval=20, sampler: BaseSampler = None, sample_number=300,
+            metrics=None
+    ) -> Tuple[np.ndarray, np.ndarray]:
         dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples, n_batch = dataset.shape[0], dataset.shape[0] // batch_size
+        metrics = metrics or []
         losses, metric_values = [], [[] for m in metrics]
         batch_getter = random_batch_getter(dataset, batch_size)
 
@@ -164,9 +190,12 @@ class KernelGAN(BaseGAN):
 
         for epoch in range(epochs):
             start = time.time()
-            kwargs = {'generator': self.generator, 'discriminator': self.discriminator,
-                      'model': self, 'dataset': dataset}
+            kwargs = {'model': self, 'dataset': dataset, 'epoch': epoch}
             total_g_loss = total_d_loss = 0.0
+
+            # update bandwidth
+            if self.bandwidth_updater:
+                self.bandwidth = self.bandwidth_updater(epoch)
 
             for i in range(n_batch):
                 g_loss = self._train_step(next(batch_getter))
@@ -177,14 +206,12 @@ class KernelGAN(BaseGAN):
                 for i, v in enumerate(metric_values):
                     v.append(metrics[i](**kwargs))
 
-            # update bandwidth
-            if self.bandwidth_updater:
-                self.bandwidth = self.bandwidth_updater(self.bandwidth, epoch, epochs)
-
             total_g_loss /= n_batch
             losses.append((total_d_loss, total_g_loss))
             self.print_epoch(epoch, epochs, time.time() - start, total_d_loss, total_g_loss)
 
+        # last sample
+        sampler(self.generator(seed), epochs - 1)
         self.bandwidth = bw_backup
         self.trained_epoch += epochs
         return np.array(losses), np.array(metric_values)
@@ -208,9 +235,9 @@ class KernelGAN(BaseGAN):
 
         return model
 
-    ###############################
+    ####################################################
     #    discriminator estimate
-    ###############################
+    ####################################################
 
     def estimate_prob(self, x_real, points):
         """
@@ -233,3 +260,28 @@ class KernelGAN(BaseGAN):
         p_estimate = tf.reduce_mean(p_estimate, axis=1)
 
         return p_estimate
+
+    ####################################################
+    #   save and load
+    ####################################################
+
+    def get_config(self):
+        base_cfg = super().get_config()
+        base_cfg.update({
+            'bandwidth': self.bandwidth,
+            'bandwidth_updater': self.bandwidth_updater.get_config() if self.bandwidth_updater else None,
+            'regularizer': self.regularizer
+        })
+        return base_cfg
+
+    @classmethod
+    def from_config(cls, config: dict):
+        model = super().from_config(config)
+        model.bandwidth = config['bandwidth']
+
+        updater_class = CustomStairBandwidth
+        # TODO: more bw updaters
+        model.bandwidth_updater = updater_class.from_config(config['bandwidth_updater']) \
+            if config['bandwidth_updater'] else None
+        model.regularizer = config['regularizer']
+        return model

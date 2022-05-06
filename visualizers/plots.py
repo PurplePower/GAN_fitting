@@ -12,6 +12,21 @@ def plot_2d_density(model: BaseGAN, n_samples=1024, seed=None, bins=100):
     pass
 
 
+def determine_boundaries(x, extend_offset_x=None, extend_offset_y=None):
+    min_x, max_x = np.min(x[:, 0]), np.max(x[:, 0])
+    min_y, max_y = np.min(x[:, 1]), np.max(x[:, 1])
+
+    extend_offset_x = extend_offset_x or (max_x - min_x) / 10
+    extend_offset_y = extend_offset_y or (max_y - min_y) / 10
+
+    min_x -= extend_offset_x
+    max_x += extend_offset_x
+    min_y -= extend_offset_y
+    max_y += extend_offset_y
+
+    return min_x, min_y, max_x, max_y
+
+
 def plot_2d_discriminator_judge_area(
         model: BaseGAN, x=None, boundaries=None, resolution=100, extend_offset=0.5, projection='2d'):
     """
@@ -25,21 +40,13 @@ def plot_2d_discriminator_judge_area(
     if x is None and boundaries is None:
         raise Exception("One of 'x' or 'boundaries' must be provided")
     if x is not None:
-        min_x, max_x = np.min(x[:, 0]), np.max(x[:, 0])
-        min_y, max_y = np.min(x[:, 1]), np.max(x[:, 1])
-        min_x -= extend_offset
-        min_y -= extend_offset
-        max_x += extend_offset
-        max_y += extend_offset
+        min_x, min_y, max_x, max_y = determine_boundaries(x, extend_offset, extend_offset)
     else:
         min_x, max_x, min_y, max_y = boundaries
 
     xv, yv = np.mgrid[min_x:max_x:resolution * 1j, min_y:max_y:resolution * 1j]
     sample_points = np.stack([xv.flatten(), yv.flatten()], axis=0).T
-    if model.discriminator:
-        probs = np.array(model.discriminator(sample_points))
-    else:
-        probs = np.array(model.estimate_prob(x, sample_points))
+    probs = model.estimate_prob(x, sample_points)
     probs = probs.reshape(xv.shape)
 
     if projection == '3d':

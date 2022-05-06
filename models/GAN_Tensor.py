@@ -2,64 +2,106 @@ import time
 
 import tensorflow as tf
 import numpy as np
-from typing import Union
+from typing import Union, Tuple
 from models import GAN
 from visualizers.BaseSampler import BaseSampler
 
 
 class GAN_Tensor(GAN):
 
-    def train(self, dataset: Union[tf.Tensor, np.ndarray], epochs, batch_size=32, sample_interval=20,
-              sampler: BaseSampler = None, sample_number=300, metrics=[],
+    def _make_tf_dataset(self, x):
+        # TODO: check type(x)
+        return tf.data.Dataset.from_tensor_slices(x)
+
+    def train(self, dataset: Union[tf.Tensor, np.ndarray], epochs, batch_size=64, sample_interval=20,
+              sampler: BaseSampler = None, sample_number=300, metrics=None,
               dg_train_ratio=1):
-        if isinstance(dataset, np.ndarray):
-            dataset = tf.constant(dataset)
-        elif not isinstance(dataset, tf.Tensor):
-            raise Exception(f'Currently not supported dataset as {type(dataset)}')
-        seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples = dataset.shape[0]
+        # dataset = self._check_dataset(dataset)
+        dataset = self._make_tf_dataset(dataset)
+        seed = tf.random.normal([sample_number, self.latent_factor])
         n_batch = int(np.ceil(n_samples / batch_size))
-        losses, metric_values = [], [[] for m in metrics]
 
-        def get_batch():  # help get infinite batches by looping the dataset
-            ds = tf.random.shuffle(dataset)
-            while True:
-                for batch_no in range(n_batch):
-                    yield ds[(t := batch_no * batch_size):t + batch_size]
-                ds = tf.random.shuffle(ds)
+        return_every_epochs = 2 * sample_interval
 
-        batch_getter = get_batch()
+        metrics = metrics or []
+        losses = []
+        epoch = 0
 
-        for epoch in range(epochs):
+        dataset = dataset.repeat(dg_train_ratio).batch(batch_size, drop_remainder=True)
+
+        for i in range(epochs // return_every_epochs):
             start = time.time()
-            kwargs = {
-                'generator': self.generator, 'discriminator': self.discriminator,
-                'model': self, 'dataset': dataset
-            }
-            total_d_loss = total_g_loss = .0
+            local_loss = self.train_faster(
+                dataset, epochs, sample_interval, dg_train_ratio,
+                seed, n_batch, batch_size, epoch, return_every_epochs
+            )
+            local_loss = local_loss.numpy()
+            # generated = generated.numpy()
 
-            # in each batch, train D for dg_train_ratio times and G once
-            for i in range(n_batch):
-                for _ in range(dg_train_ratio - 1):
-                    self._train_step_discriminator(next(batch_getter))
+            # record losses
+            losses.extend(local_loss)
+
+            # sampling
+            # for j, samples in enumerate(generated):
+            #     sampler(samples, epoch + j * sample_interval)
+
+            avg_time = (time.time() - start) / return_every_epochs
+            for j, loss in enumerate(local_loss):
+                self.print_epoch(epoch + j, epochs, avg_time, loss[0], loss[1])
+
+            epoch += return_every_epochs
+            pass
+
+        # TODO: last sample
+        return losses, []
+
+    # use tf.range() instead of python built-in range()
+    @tf.function
+    def train_faster(
+            self, dataset: tf.data.Dataset, epochs, sample_interval,
+            dg_train_ratio,
+            seed, n_batch, batch_size, cur_epoch, return_every_epochs
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
+        """
+        [Deprecated] no much improvement.
+
+        :param dataset:
+        :param epochs:
+        :param sample_interval:
+        :param dg_train_ratio:
+        :param seed:
+        :param n_batch:
+        :param cur_epoch:
+        :param return_every_epochs:
+        :return:
+        """
+        # storages
+        losses = tf.TensorArray(tf.float32, size=return_every_epochs)
+        loss_cnt = 0
+
+        # def get_batch():
+        #     idxs = tf.range(dataset.shape[0])
+        #     idxs = tf.random.shuffle(idxs)[:batch_size]
+        #     return tf.gather(dataset, indices=idxs)
+
+        for epoch_offset in tf.range(return_every_epochs):
+            total_g_loss = total_d_loss = .0
+
+            # training
+            dsiter = iter(dataset)
+            for i in tf.range(n_batch):
+                for _ in tf.range(dg_train_ratio - 1):
+                    self._train_step_discriminator(next(dsiter))
                     pass
-
-                d_loss, g_loss = self._train_step_both(next(batch_getter))
+                d_loss, g_loss = self._train_step_both(next(dsiter))
                 total_d_loss += d_loss
                 total_g_loss += g_loss
 
-            if epoch % sample_interval == 0 and sampler is not None:
-                sampler(self.generator(seed), epoch)
-
-                for i, v in enumerate(metric_values):
-                    v.append(metrics[i](**kwargs))
-                pass
-
-            total_g_loss /= n_batch
+            # sample generated points
             total_d_loss /= n_batch
-            losses.append((total_d_loss, total_g_loss))
-            self.print_epoch(epoch, epochs, time.time() - start, total_d_loss, total_g_loss)
+            total_g_loss /= n_batch
+            losses = losses.write(loss_cnt, [total_d_loss, total_g_loss])
+            loss_cnt += 1
 
-        self.trained_epoch += epochs
-
-        return np.array(losses), np.array(metric_values)
+        return losses.stack()

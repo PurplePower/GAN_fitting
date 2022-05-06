@@ -1,22 +1,42 @@
+import abc
+import tensorflow as tf
 from pathlib import Path
 import json
 
-from models import BaseGAN
+from models import *
 from utils.common import empty_directory
+from utils.save import convert_numpy_types_to_natives
+
+
+class ModelGetter:
+    def __init__(self, input_dim, latent_factor, lr_d, lr_g):
+        self.input_dim = input_dim
+        self.latent_factor = latent_factor
+        self.lr_d, self.lr_g = lr_d, lr_g
+
+    @abc.abstractmethod
+    def get(self, structure, *args, **kwargs) -> BaseGAN:
+        pass
 
 
 class Info:
     def __init__(self, **kwargs):
+        # model info
         self.input_dim = 0
         self.latent_factor = 0
         self.lr_d = self.lr_g = 0
         self.opt = ''
+        self.d_opt = ''
+        self.g_opt = ''
+        self.struct = None
+        self.gan_type = 'Invalid'
+
+        # training info
         self.batch_sz = 0
         self.dg_r = 0
-        self.struct = None
         self.done = False
         self.trained_epochs = 0
-        self.gan_type = 'Invalid'
+
         self.__dict__.update(**kwargs)
 
     @classmethod
@@ -30,6 +50,15 @@ class Info:
         with open(path, 'w') as f:
             json.dump(self.__dict__, f, indent=4)
         pass
+
+    @classmethod
+    def from_model(cls, model: BaseGAN, structure, batch_sz, dg_r=None):
+        # BaseGAN info
+        info = Info()
+        info.__dict__['model'] = convert_numpy_types_to_natives(model.get_config())
+        info.struct = structure
+        info.batch_sz, info.dg_r = batch_sz, dg_r
+        return info
 
 
 def folder_name_getter(i: Info):

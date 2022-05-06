@@ -1,10 +1,10 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras.optimizers import SGD, Adam, Adadelta
+from tensorflow.keras.optimizers import SGD, Adam, Adadelta, RMSprop
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 import numpy as np
 import matplotlib.pyplot as plt
-from models import WGAN, KernelGAN, fGAN
+from models import GAN, WGAN, LSGAN, KernelGAN, fGAN, CustomStairBandwidth, SWG
 from data.datamaker import *
 from metrics.JensenShannonDivergence import JensenShannonDivergence as JSD
 from utils.common import *
@@ -12,9 +12,9 @@ from utils.structures import *
 from visualizers.plots import plot_2d_density, plot_2d_discriminator_judge_area
 
 if __name__ == '__main__':
-    model_type = fGAN
+    model_type = SWG
     save_path = f'pics/{model_type.__name__.lower()}'
-    clean_images(save_path)
+    empty_directory(save_path)
     # x, sampler = make_cross_line_points(1024, k=3, path=save_path)
 
     # make biased cluster size
@@ -32,6 +32,10 @@ if __name__ == '__main__':
     else:
         x, sampler = make_ring_dots(n_samples, radius=2, path=save_path)
 
+    # x, sampler = make_sun(n_samples, path=save_path)
+
+    sampler.formats = ['png', 'svg']
+
     # show original distribution
     plt.scatter(x[:, 0], x[:, 1])
     plt.savefig(f'{save_path}/dist.png')
@@ -39,43 +43,68 @@ if __name__ == '__main__':
     plt.hist2d(x[:, 0], x[:, 1], bins=100)
     plt.colorbar()
     plt.savefig(f'{save_path}/dist_density.png')
+    plt.savefig(f'{save_path}/dist_density.svg')
     # plt.show()
 
     # dataset = tf.data.Dataset.from_tensor_slices(x)
 
     latent_factor = 5
-    D, G = level_1_structure(2, latent_factor)
+    D, G = level_2_structure(2, latent_factor)
+    gan = None
 
-
-    def updater(bw, epoch, epochs):
-        if epoch < 2500:
-            return 0.5
-        elif epoch < 4000:
-            return 0.25
-        elif epoch < 6500:
-            return 0.125
-        else:
-            return 0.08
-
-
-    # gan = model_type(
-    #     2, latent_factor=latent_factor, D=None, G=G,
-    #     bandwidth=0.5, bandwidth_updater=updater,
-    #     d_optimizer=Adadelta(1), g_optimizer=Adadelta(1))
-    gan = model_type(
-        2, latent_factor=latent_factor, D=None, G=G,
-        d_optimizer=Adadelta(0.1),
-        g_optimizer=Adadelta(0.1),
-    # )
-        divergence='squared-hellinger')
-    # , d_optimizer=SGD(1e-3), g_optimizer=SGD(1e-3)
+    if model_type is GAN:
+        gan = model_type(
+            2, latent_factor=latent_factor, D=D, G=G,
+            d_optimizer=SGD(1e-3), g_optimizer=SGD(1e-3))
+    elif model_type is LSGAN:
+        gan = model_type(
+            2, latent_factor=latent_factor, D=D, G=G,
+            d_optimizer=Adam(1e-3), g_optimizer=Adam(1e-3)
+        )
+    elif model_type is WGAN:
+        gan = model_type(
+            2, latent_factor=latent_factor, D=D, G=G,
+            d_optimizer=SGD(1e-2), g_optimizer=SGD(1e-2)
+            # d_optimizer=RMSprop(1e-3), g_optimizer=RMSprop(1e-3)
+        )
+    elif model_type is KernelGAN:
+        # bw_updater = CustomStairBandwidth([(2500, 0.5), (4000, 0.25), (6500, 0.125)], 0.08)
+        bw_updater = ExponentialDecay(0.45, 10000, 0.2)
+        gan = KernelGAN(
+            2, latent_factor=latent_factor, D=None, G=G,
+            # d_optimizer=Adadelta(1), g_optimizer=Adadelta(1),
+            d_optimizer=RMSprop(), g_optimizer=RMSprop(),
+            bandwidth_updater=bw_updater, bandwidth=0.5
+        )
+    elif model_type is fGAN:
+        gan = fGAN(
+            2, latent_factor=latent_factor, D=D, G=G,
+            d_optimizer=Adadelta(0.1), g_optimizer=Adadelta(0.1),
+            divergence='pearson-chi-square'
+        )
+    elif model_type is SWG:
+        gan = SWG(
+            2, latent_factor, D=D, G=G,
+            # d_optimizer=SGD(1e-0), g_optimizer=SGD(1e-0),
+            d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
+            use_discriminator=True, n_directions=100
+        )
+    else:
+        raise Exception('Illegal GAN type.')
 
     # tf.profiler.experimental.start('log')
 
-    losses, metrics = gan.train(
-        x, 2000, batch_size=64, sample_interval=20,
-        sampler=sampler, sample_number=512,
-        metrics=[JSD()])
+    sample_interval = 50
+    if isinstance(gan, (KernelGAN, fGAN, SWG)):
+        losses, metrics = gan.train(
+            x, 1500, batch_size=64, sample_interval=sample_interval,
+            sampler=sampler, sample_number=512,
+            metrics=[JSD()])
+    else:
+        losses, metrics = gan.train(
+            x, 10000, batch_size=64, sample_interval=sample_interval,
+            sampler=sampler, sample_number=512, dg_train_ratio=1,
+            metrics=[JSD()])
 
     # tf.profiler.experimental.stop()
     empty_directory(save_path + '/model')
@@ -86,18 +115,23 @@ if __name__ == '__main__':
     plt.title('Losses over training epochs')
     plt.legend(['D losses', 'G losses'])
     plt.savefig(f'{save_path}/losses.png')
+    plt.savefig(f'{save_path}/losses.svg')
 
     plt.figure()
     plt.plot(metrics[0])
     plt.title('JSD')
     plt.savefig(f'{save_path}/jsd.png')
+    plt.savefig(f'{save_path}/jsd.svg')
 
     plt.figure('2D Density')
     plot_2d_density(gan, 256 * 1024)
-    plt.savefig(f'{save_path}/density')
+    plt.savefig(f'{save_path}/density.png')
+    plt.savefig(f'{save_path}/density.svg')
 
     plt.figure()
     plot_2d_discriminator_judge_area(gan, x, projection='3d')
+    plt.savefig(f'{save_path}/judge area.png')
+    plt.savefig(f'{save_path}/judge area.svg')
 
     plt.show()
     pass

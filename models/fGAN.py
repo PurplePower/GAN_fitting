@@ -61,7 +61,8 @@ def pearson_chi_square_activate(v):
 
 @tf.function
 def pearson_chi_square_conjugate_activate(t):
-    return tf.square(t) / 4.0 + t
+    # return tf.square(t) / 4.0 + t
+    return tf.square(t / 2.0) + t
 
 
 #########################################
@@ -100,7 +101,6 @@ class fGAN(BaseGAN):
 
         self.divergence = divergence.lower()
         self.activation, self.conjugate_activate = VARIATIONAL_DIVERGENCE[self.divergence]
-        # self.disc_grad_record = self.gen_grad_record = None
 
     def _build_discriminator(self) -> keras.Sequential:
         return keras.Sequential([
@@ -122,7 +122,7 @@ class fGAN(BaseGAN):
     def _build_g_optimizer(self) -> tf.keras.optimizers.Optimizer:
         return tf.keras.optimizers.SGD(0.01)
 
-    ###############################
+    ############################################
     #
 
     # @tf.function
@@ -148,26 +148,26 @@ class fGAN(BaseGAN):
     def _train_step(self, x_real, record_grads=False):
         batch_sz = len(x_real)
         noise = tf.random.normal([batch_sz, self.latent_factor])
-        # discriminator, generator = self.discriminator, self.generator
+        discriminator, generator = self.discriminator, self.generator
 
         with tf.GradientTape(persistent=True) as tape:
-            x_fake = self.generator(noise, training=True)
+            x_fake = generator(noise, training=True)
             # term that records error from discriminating x_real
             real_loss = tf.reduce_mean(
-                self.activation(self.discriminator(x_real, training=True)))
+                self.activation(discriminator(x_real, training=True)))
 
             # term that records error from discriminating x_fake
             fake_loss = -1.0 * tf.reduce_mean(
-                self.conjugate_activate(self.discriminator(x_fake, training=True)))
+                self.conjugate_activate(discriminator(x_fake, training=True)))
 
             objective = real_loss + fake_loss
             minus_objective = -objective
 
-        disc_grads = tape.gradient(minus_objective, self.discriminator.trainable_variables)  # maximize
-        gen_grads = tape.gradient(objective, self.generator.trainable_variables)  # minimize
+        disc_grads = tape.gradient(minus_objective, discriminator.trainable_variables)  # maximize
+        gen_grads = tape.gradient(objective, generator.trainable_variables)  # minimize
 
-        self.d_optimizer.apply_gradients(zip(disc_grads, self.discriminator.trainable_variables))
-        self.g_optimizer.apply_gradients(zip(gen_grads, self.generator.trainable_variables))
+        self.d_optimizer.apply_gradients(zip(disc_grads, discriminator.trainable_variables))
+        self.g_optimizer.apply_gradients(zip(gen_grads, generator.trainable_variables))
 
         if record_grads:
             d_norm = [tf.norm(g, ord=2) for g in disc_grads]
@@ -177,7 +177,7 @@ class fGAN(BaseGAN):
         return objective
 
     def train(
-            self, dataset, epochs, batch_size=32, sample_interval=20, sampler: BaseSampler = None, sample_number=300,
+            self, dataset, epochs, batch_size=64, sample_interval=20, sampler: BaseSampler = None, sample_number=300,
             metrics=[], record_grads=False
     ) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, list]]:
         dataset = self._check_dataset(dataset)
@@ -191,8 +191,7 @@ class fGAN(BaseGAN):
 
         for epoch in range(epochs):
             start = time.time()
-            kwargs = {'generator': self.generator, 'discriminator': self.discriminator,
-                      'model': self, 'dataset': dataset}
+            kwargs = {'model': self, 'dataset': dataset, 'epoch': epoch}
             total_objective = 0.0
             tmp_d_norm, tmp_g_norm = [], []
 
@@ -216,6 +215,8 @@ class fGAN(BaseGAN):
             losses.append((total_objective / batch_size, 0))
             self.print_epoch(epoch, epochs, time.time() - start, total_objective / batch_size, 0)
 
+        # last sample
+        sampler(self.generator(seed), epochs - 1)
         self.trained_epoch += epochs
 
         if record_grads:
@@ -232,4 +233,25 @@ class fGAN(BaseGAN):
     def load(cls, path):
         model: fGAN = super().load(path)
         model.activation, model.conjugate_activate = VARIATIONAL_DIVERGENCE[model.divergence]
+        return model
+
+    ####################################################
+    #   save and load
+    ####################################################
+
+    def get_config(self):
+        base_cfg = super().get_config()
+        base_cfg.update({
+            'divergence': self.divergence
+        })
+        return base_cfg
+
+    @classmethod
+    def from_config(cls, config: dict):
+        model = fGAN(config['input_dim'], config['latent_factor'],
+                     divergence=config['divergence'])
+        model.discriminator = keras.Sequential.from_config(config['discriminator'])
+        model.generator = keras.Sequential.from_config(config['generator'])
+        model.d_optimizer = keras.optimizers.get(config['d_optimizer']['name']).from_config(config['d_optimizer'])
+        model.g_optimizer = keras.optimizers.get(config['g_optimizer']['name']).from_config(config['g_optimizer'])
         return model

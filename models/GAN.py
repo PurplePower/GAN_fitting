@@ -20,15 +20,13 @@ class GAN(BaseGAN):
     def _build_discriminator(self):
         return keras.Sequential([
             layers.Dense(32, input_shape=(self.input_dim,)), layers.LeakyReLU(),
-            # layers.Dense(32), layers.LeakyReLU(),
             layers.Dense(16), layers.LeakyReLU(),
             layers.Dense(1)
         ])
 
     def _build_generator(self):
         return keras.Sequential([
-            layers.Dense(32, use_bias=False, input_shape=(self.latent_factor,)), layers.LeakyReLU(),
-            # layers.Dense(32), layers.LeakyReLU(),
+            layers.Dense(32, input_shape=(self.latent_factor,)), layers.LeakyReLU(),
             layers.Dense(16), layers.LeakyReLU(),
             layers.Dense(self.input_dim)
         ])
@@ -39,9 +37,9 @@ class GAN(BaseGAN):
     def _build_g_optimizer(self) -> tf.keras.optimizers.Optimizer:
         return tf.keras.optimizers.SGD(0.01)
 
-    ###############################
+    ####################################################
     #   losses and training
-    ###############################
+    ####################################################
 
     cross_entropy = tf.keras.losses.BinaryCrossentropy(from_logits=True)
 
@@ -94,21 +92,23 @@ class GAN(BaseGAN):
 
         return disc_loss, gen_loss
 
-    def train(self, dataset: Union[tf.Tensor, np.ndarray], epochs, batch_size=32, sample_interval=20,
-              sampler: BaseSampler = None, sample_number=300, metrics=[],
-              dg_train_ratio=1):
+    def train(
+            self, dataset: Union[tf.Tensor, np.ndarray], epochs, batch_size=64,
+            sample_interval=20, sampler: BaseSampler = None, sample_number=300,
+            metrics=None, dg_train_ratio=1
+    ):
         dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples = dataset.shape[0]
         n_batch = n_samples // batch_size
+        metrics = metrics or []
         losses, metric_values = [], [[] for m in metrics]
 
         batch_getter = random_batch_getter(dataset, batch_size)
 
         for epoch in range(epochs):
             start = time.time()
-            kwargs = {'generator': self.generator, 'discriminator': self.discriminator,
-                      'model': self, 'dataset': dataset}
+            kwargs = {'model': self, 'dataset': dataset, 'epoch': epoch}
             total_d_loss = total_g_loss = .0
 
             # in each batch, train D for dg_train_ratio times and G once
@@ -132,6 +132,8 @@ class GAN(BaseGAN):
             losses.append((total_d_loss, total_g_loss))
             self.print_epoch(epoch, epochs, time.time() - start, total_d_loss, total_g_loss)
 
+        # last sample
+        sampler(self.generator(seed), epochs - 1)
         self.trained_epoch += epochs
 
         return np.array(losses), np.array(metric_values)
@@ -177,3 +179,9 @@ class GAN(BaseGAN):
         self.trained_epoch += epochs
 
         return np.array(losses)
+
+    ####################################################
+    #   save and load
+    ####################################################
+
+    # using inherited config save and load

@@ -1,5 +1,7 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.optimizers import SGD, Adam, Adadelta
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from models import *
 from data.datamaker import make_ring_dots
 
@@ -10,7 +12,7 @@ if __name__ == '__main__':
     for cls in model_types:
         path = f'./tmp/{cls.__name__}'
         print(f'Testing {cls.__name__}...')
-        model = cls(input_dim=2)
+        model = cls(input_dim=2, d_optimizer=Adam(ExponentialDecay(0.01, 100, 0.8)))
         x_test = np.random.normal(0, 1, size=(4, model.latent_factor))
 
         model.train(x, 5, sampler=None)
@@ -44,6 +46,9 @@ if __name__ == '__main__':
 
         # compare predict results
         assert np.alltrue(cur_pred == new_model.generate(seed=x_test))
+
+        # continual training
+        new_model.train(x, 5, sampler=None)
 
         print(f'Class {cls.__name__} test passed!')
 
