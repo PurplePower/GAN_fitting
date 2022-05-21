@@ -54,7 +54,7 @@ def round_to_fit(a):
 
 def get_optimizer_string(opt, scientific=False):
     """
-
+    Convert optimizer to readable string.
     :param opt:
     :param scientific:
     :return:

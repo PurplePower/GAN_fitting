@@ -1,12 +1,13 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras.optimizers import SGD, Adam, Adadelta, RMSprop
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
+from tensorflow.keras.optimizers.schedules import ExponentialDecay, PiecewiseConstantDecay
 import numpy as np
 import matplotlib.pyplot as plt
-from models import GAN, WGAN, LSGAN, KernelGAN, fGAN, CustomStairBandwidth, SWG
+from models import GAN, WGAN, LSGAN, KernelGAN, fGAN, SWG, SWGAN
 from data.datamaker import *
 from metrics.JensenShannonDivergence import JensenShannonDivergence as JSD
+from metrics.JudgeSurface import JudgeSurface
 from utils.common import *
 from utils.structures import *
 from visualizers.plots import plot_2d_density, plot_2d_discriminator_judge_area
@@ -19,18 +20,20 @@ if __name__ == '__main__':
 
     # make biased cluster size
     n_samples = 1024
-    biased_mog = False
-    if biased_mog:
-        ratios = np.array([1, 2, 4, 8, 16, 24, 32, 40])
-        cluster_sizes = ratios * n_samples / np.sum(ratios)
-        cluster_sizes = np.around(cluster_sizes).astype(dtype=np.int32)
-        if np.sum(cluster_sizes) < n_samples:
-            cluster_sizes[0] += n_samples - np.sum(cluster_sizes)
-        elif np.sum(cluster_sizes) > n_samples:
-            cluster_sizes[-1] -= np.sum(cluster_sizes) - n_samples
-        x, sampler = make_ring_dots(cluster_sizes, radius=2, path=save_path)
-    else:
-        x, sampler = make_ring_dots(n_samples, radius=2, path=save_path)
+    # biased_mog = False
+    # if biased_mog:
+    #     ratios = np.array([1, 2, 4, 8, 16, 24, 32, 40])
+    #     cluster_sizes = ratios * n_samples / np.sum(ratios)
+    #     cluster_sizes = np.around(cluster_sizes).astype(dtype=np.int32)
+    #     if np.sum(cluster_sizes) < n_samples:
+    #         cluster_sizes[0] += n_samples - np.sum(cluster_sizes)
+    #     elif np.sum(cluster_sizes) > n_samples:
+    #         cluster_sizes[-1] -= np.sum(cluster_sizes) - n_samples
+    #     x, sampler = make_ring_dots(cluster_sizes, radius=2, path=save_path)
+    # else:
+    #     x, sampler = make_ring_dots(n_samples, radius=2, path=save_path)
+
+    x, sampler = make_25_mog(n_samples, path=save_path)
 
     # x, sampler = make_sun(n_samples, path=save_path)
 
@@ -49,7 +52,7 @@ if __name__ == '__main__':
     # dataset = tf.data.Dataset.from_tensor_slices(x)
 
     latent_factor = 5
-    D, G = level_2_structure(2, latent_factor)
+    D, G = level_4_structure(2, latent_factor)
     gan = None
 
     if model_type is GAN:
@@ -68,8 +71,8 @@ if __name__ == '__main__':
             # d_optimizer=RMSprop(1e-3), g_optimizer=RMSprop(1e-3)
         )
     elif model_type is KernelGAN:
-        # bw_updater = CustomStairBandwidth([(2500, 0.5), (4000, 0.25), (6500, 0.125)], 0.08)
-        bw_updater = ExponentialDecay(0.45, 10000, 0.2)
+        bw_updater = PiecewiseConstantDecay([1000, 5000, 8000], [.5, .25, .125, .0625])
+        # bw_updater = ExponentialDecay(0.45, 10000, 0.2)
         gan = KernelGAN(
             2, latent_factor=latent_factor, D=None, G=G,
             # d_optimizer=Adadelta(1), g_optimizer=Adadelta(1),
@@ -87,7 +90,13 @@ if __name__ == '__main__':
             2, latent_factor, D=D, G=G,
             # d_optimizer=SGD(1e-0), g_optimizer=SGD(1e-0),
             d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
-            use_discriminator=True, n_directions=100
+            use_discriminator=True, n_directions=1024,
+        )
+    elif model_type is SWGAN:
+        gan = SWGAN(
+            2, latent_factor, D=D, G=G,
+            d_optimizer=Adam(1e-5), g_optimizer=Adam(1e-5),
+            lambda1=1.0, lambda2=1.0
         )
     else:
         raise Exception('Illegal GAN type.')
@@ -95,16 +104,16 @@ if __name__ == '__main__':
     # tf.profiler.experimental.start('log')
 
     sample_interval = 50
-    if isinstance(gan, (KernelGAN, fGAN, SWG)):
+    if isinstance(gan, (KernelGAN, fGAN, SWGAN)):
         losses, metrics = gan.train(
-            x, 1500, batch_size=64, sample_interval=sample_interval,
+            x, 10000, batch_size=64, sample_interval=sample_interval,
             sampler=sampler, sample_number=512,
             metrics=[JSD()])
     else:
         losses, metrics = gan.train(
-            x, 10000, batch_size=64, sample_interval=sample_interval,
-            sampler=sampler, sample_number=512, dg_train_ratio=1,
-            metrics=[JSD()])
+            x, 5000, batch_size=64, sample_interval=sample_interval,
+            sampler=sampler, sample_number=512, dg_train_ratio=3,
+            metrics=[JSD(), JudgeSurface(save_path + '/surfaces')])
 
     # tf.profiler.experimental.stop()
     empty_directory(save_path + '/model')

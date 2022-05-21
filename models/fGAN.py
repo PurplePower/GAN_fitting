@@ -90,6 +90,15 @@ VARIATIONAL_DIVERGENCE = {
 
 
 class fGAN(BaseGAN):
+    """
+    Implements f-GAN described in paper f-GAN: Training Generative Neural Samplers using
+    Variational  Divergence  Minimization.
+
+    Using Jensen-Shannon divergence seems good and little mode collapse. Other divergence
+    should use with Batch Normalization to avoid numerical instability.
+
+    """
+
     def __init__(self, input_dim, latent_factor=5,
                  D=None, G=None, d_optimizer=None, g_optimizer=None, divergence: str = 'jensen-shannon'):
         super().__init__(input_dim, latent_factor)
@@ -123,7 +132,8 @@ class fGAN(BaseGAN):
         return tf.keras.optimizers.SGD(0.01)
 
     ############################################
-    #
+    #   losses and training
+    ############################################
 
     # @tf.function
     # def _f_loss(self, x_real, x_fake):
@@ -146,6 +156,13 @@ class fGAN(BaseGAN):
 
     @tf.function
     def _train_step(self, x_real, record_grads=False):
+        """
+
+        :param x_real:
+        :param record_grads: If True, record D and G 's gradients' 2-norm.
+                To inspect numerical instability.
+        :return:
+        """
         batch_sz = len(x_real)
         noise = tf.random.normal([batch_sz, self.latent_factor])
         discriminator, generator = self.discriminator, self.generator
@@ -177,13 +194,15 @@ class fGAN(BaseGAN):
         return objective
 
     def train(
-            self, dataset, epochs, batch_size=64, sample_interval=20, sampler: BaseSampler = None, sample_number=300,
-            metrics=[], record_grads=False
+            self, dataset, epochs, batch_size=64,
+            sample_interval=20, sampler: BaseSampler = None, sample_number=300,
+            metrics=None, record_grads=False
     ) -> Union[Tuple[np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, list]]:
         dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
         n_samples = dataset.shape[0]
         n_batch = n_samples // batch_size
+        metrics = metrics or []
         losses, metric_values = [], [[] for m in metrics]
         grad_norms = []
 

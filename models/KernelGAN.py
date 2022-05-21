@@ -40,6 +40,18 @@ class CustomStairBandwidth(LearningRateSchedule):
 
 
 class KernelGAN(BaseGAN):
+    """
+    Implements Kernel GAN described in paper Non-parametric estimation of
+    Jensen-Shannon Divergence in Generative Adversarial Network training.
+
+    Using Gaussian kernel.
+
+    Bandwidth must be dynamic and chosen carefully for faster convergence.
+
+    Kernel GAN has no discriminator.
+
+    """
+
     def __init__(self, input_dim, latent_factor=5,
                  D=None, G=None, d_optimizer=None, g_optimizer=None,
                  bandwidth=0.5, bandwidth_updater=None):
@@ -75,6 +87,7 @@ class KernelGAN(BaseGAN):
     @tf.function
     def _kernel(self, x):
         """
+        [DEPRECATED]
         Multivariate Gaussian kernel
         :param x: samples of points passed to kernel
         :return: PDF of points
@@ -86,6 +99,7 @@ class KernelGAN(BaseGAN):
     @tf.function
     def _estimate_prob(self, x, x_sample):
         """
+        [DEPRECATED]
         Compute estimated p_{n, bandwidth} or p^{(\theta)}_{n, bandwidth}
         :param x: point(s) where density is estimated
         :param x_sample: samples of points drawn from real/fake distribution
@@ -96,7 +110,7 @@ class KernelGAN(BaseGAN):
     @tf.function
     def _kernel_loss(self, x_real, x_fake):
         """
-        [Deprecated] Compute kernel loss. Low performance due to little parallelization.
+        [DEPRECATED] Compute kernel loss. Low performance due to little parallelization.
         :param x_real:
         :param x_fake:
         :return:
@@ -106,7 +120,7 @@ class KernelGAN(BaseGAN):
         estimate_prob = self._estimate_prob
 
         loss = 0.0
-        for i in range(n):
+        for i in range(n):  # ! little utilization of GPU, maybe tf.range() with parallel
             # discriminator loss
             p_real_xi = estimate_prob(x_real[i], x_real)  # p_real(Xi)
             p_fake_xi = estimate_prob(x_real[i], x_fake)  # p_fake^{(\theta)}(Xi)
@@ -133,7 +147,7 @@ class KernelGAN(BaseGAN):
         n = x_real.shape[0]
         estimate_prob = self._estimate_prob2
 
-        # making cartesian products
+        # making Cartesian products
         tiles = tf.constant([n, 1])
         x_real_tiled = tf.tile(x_real, tiles)
         x_fake_tiled = tf.tile(x_fake, tiles)
@@ -239,7 +253,7 @@ class KernelGAN(BaseGAN):
     #    discriminator estimate
     ####################################################
 
-    def estimate_prob(self, x_real, points):
+    def estimate_prob(self, x_real, points) -> np.ndarray:
         """
         Compute p_hat_{n, /sigma}(x), i.e, points' kernel density in x_real.
         For plot 2d discriminator judge area.
@@ -259,7 +273,7 @@ class KernelGAN(BaseGAN):
         p_estimate = tf.reshape(p_estimate, [points.shape[0], n])
         p_estimate = tf.reduce_mean(p_estimate, axis=1)
 
-        return p_estimate
+        return np.array(p_estimate)
 
     ####################################################
     #   save and load

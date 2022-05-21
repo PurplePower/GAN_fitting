@@ -14,6 +14,16 @@ from utils.structures import level_1_structure
 
 
 class SWG(BaseGAN):
+    """
+    Implements SWG in paper Generative Modeling using the Sliced Wasserstein Distance.
+
+    Random projection is used, which is different from SWGAN 's orthogonal projection.
+
+    For low-dimensional data, `use_discriminator` should be TRUE, since discriminator
+    helps extract more useful features and help convergence faster and better.
+
+    Lower learning rate (<= 1e-4) is preferred.
+    """
 
     def __init__(
             self, input_dim, latent_factor, D=None, G=None,
@@ -23,7 +33,7 @@ class SWG(BaseGAN):
         super().__init__(input_dim, latent_factor)
         self.use_discriminator = use_discriminator
         self.bce = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-        self.n_directions = n_directions
+        self.n_directions = n_directions    # number of random projection vectors
         self.lambda1 = float(lambda1)  # gradient penalty coefficient
 
         super()._setup_models(D, G, d_optimizer, g_optimizer)
@@ -32,11 +42,11 @@ class SWG(BaseGAN):
             self.discriminator = self.d_optimizer = None
             raise Exception('SWG without discriminator can be severely bad in fitting anything.')
         else:
-            # make discriminator a feature extractor
+            # make discriminator a feature extractor, the last second layer as feature
             self.discriminator = keras.Model(
                 inputs=self.discriminator.input,
                 outputs=[self.discriminator.layers[-2].output, self.discriminator.output])
-            print(f'Discriminator has {self.discriminator.layers[-2].output_shape[1]} features')
+            print(f'Discriminator has {self.discriminator.output_shape[0][1]} features')
 
     def _build_discriminator(self) -> keras.Sequential:
         return level_1_structure(self.input_dim, self.latent_factor)[0] if self.use_discriminator else None
@@ -45,10 +55,10 @@ class SWG(BaseGAN):
         return level_1_structure(self.input_dim, self.latent_factor)[1]
 
     def _build_d_optimizer(self) -> tf.keras.optimizers.Optimizer:
-        return Adam(1e-3) if self.use_discriminator else None
+        return Adam(1e-4) if self.use_discriminator else None
 
     def _build_g_optimizer(self) -> tf.keras.optimizers.Optimizer:
-        return Adam(1e-3)
+        return Adam(1e-4)
 
     ###################################################
     #   losses and training
@@ -59,12 +69,9 @@ class SWG(BaseGAN):
         n_features = true_features.shape[1]
 
         # make random unit directions
-        theta = tf.random.normal([n_features, self.n_directions])
+        # theta = tf.random.normal([n_features, self.n_directions])
+        theta = tf.random.uniform([n_features, self.n_directions], minval=-1, maxval=1)
         theta = tf.linalg.l2_normalize(theta, axis=0)  # unit direction vectors
-
-        # use random orthogonal directions
-        # a = tf.random.normal([n_features, n_features])
-        # s, theta, v = tf.linalg.svd(a)
 
         # project features onto directions
         # shapes are [n_directions, batch_size]
@@ -79,6 +86,8 @@ class SWG(BaseGAN):
 
     @tf.function
     def _gradient_penalty(self, x_real, x_fake):
+        """
+        """
         t = tf.random.uniform(x_real.shape)
         interpolate = x_real * t + x_fake * (1.0 - t)
 
@@ -88,6 +97,23 @@ class SWG(BaseGAN):
 
         grads = tape.gradient(d_interpolate_logits, interpolate)
         return tf.reduce_mean(tf.square(tf.norm(grads, axis=1) - 1.0))
+
+    @tf.function
+    def _discriminator_loss(self, x_real, x_fake, real_prob, fake_prob):
+        """
+
+        :param x_real:
+        :param x_fake:
+        :param real_prob: D's output for x_real, of shape (batch_size, 1)
+        :param fake_prob:
+        :return:
+        """
+        true_loss = self.bce(tf.ones_like(real_prob), real_prob)
+        fake_loss = self.bce(tf.zeros_like(fake_prob), fake_prob)
+        disc_loss = tf.reduce_mean(true_loss + fake_loss)
+        gp = self._gradient_penalty(x_real, x_fake)
+        disc_loss += self.lambda1 * gp
+        return disc_loss
 
     @tf.function
     def _train_step(self, x_real):
@@ -108,11 +134,7 @@ class SWG(BaseGAN):
                 sw_loss = self._sw_loss(real_feat, fake_feat)
 
                 # discriminator loss
-                true_loss = self.bce(tf.ones_like(real_prob), real_prob)
-                fake_loss = self.bce(tf.zeros_like(fake_prob), fake_prob)
-                disc_loss = tf.reduce_mean(true_loss + fake_loss)
-                gp = self._gradient_penalty(x_real, x_fake)
-                disc_loss += self.lambda1 * gp
+                disc_loss = self._discriminator_loss(x_real, x_fake, real_prob, fake_prob)
 
                 pass
 
@@ -132,10 +154,26 @@ class SWG(BaseGAN):
 
         return disc_loss, sw_loss
 
+    @tf.function
+    def _train_step_discriminator(self, x_real):
+        if not self.use_discriminator:
+            return
+
+        batch_size = x_real.shape[0]
+        discriminator, generator = self.discriminator, self.generator
+        with tf.GradientTape() as tape:
+            z = tf.random.normal([batch_size, self.latent_factor])
+            x_fake = generator(z, training=True)
+            real_feat, real_prob = self.discriminator(x_real, training=True)
+            fake_feat, fake_prob = self.discriminator(x_fake, training=True)
+            disc_loss = self._discriminator_loss(x_real, x_fake, real_prob, fake_prob)
+        grad = tape.gradient(disc_loss, discriminator.trainable_variables)
+        self.d_optimizer.apply_gradients(zip(grad, discriminator.trainable_variables))
+
     def train(
             self, dataset, epochs, batch_size=32,
             sample_interval=20, sampler: BaseSampler = None, sample_number=300,
-            metrics=None
+            dg_train_ratio=1, metrics=None
     ) -> Tuple[np.ndarray, np.ndarray]:
         dataset = self._check_dataset(dataset)
         seed = tf.random.normal([sample_number, self.latent_factor])
@@ -152,6 +190,10 @@ class SWG(BaseGAN):
             total_d_loss = total_g_loss = .0
 
             for i in range(n_batch):
+                for _ in range(dg_train_ratio - 1):
+                    self._train_step_discriminator(next(batch_getter))
+                    pass
+
                 d_loss, g_loss = self._train_step(next(batch_getter))
                 total_d_loss += d_loss
                 total_g_loss += g_loss

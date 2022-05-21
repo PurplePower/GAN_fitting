@@ -50,17 +50,18 @@ if __name__ == '__main__':
     model_type = SWG
 
     if model_type is WGAN:
-        epochs = 10000
+        epochs = 3200
         model = WGAN(
             2, latent_factor, D=D, G=G,
             # d_optimizer=RMSprop(), g_optimizer=RMSprop()
-            d_optimizer=SGD(ExponentialDecay(1e-2, 15000, 0.1)),
-            g_optimizer=SGD(ExponentialDecay(1e-2, 15000, 0.1)),
+            d_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
+            g_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
+            # d_optimizer=SGD(1e-2), g_optimizer=SGD(1e-2)
         )
         losses, metrics = model.train(
-            x, epochs, batch_size=1024,
-            sample_number=512, sampler=sampler, sample_interval=1000,
-            dg_train_ratio=8, metrics=[JSD(), surface_sampler]
+            x, epochs, batch_size=64,
+            sample_number=512, sampler=sampler, sample_interval=50,
+            dg_train_ratio=5, metrics=[JSD(), surface_sampler]
         )
     elif model_type is KernelGAN:
         exp = ExponentialDecay(0.10, 1500, 0.2)
@@ -110,11 +111,12 @@ if __name__ == '__main__':
         model = SWG(
             2, latent_factor, D=D, G=G,
             d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
-            use_discriminator=True
+            n_directions=100,
+            use_discriminator=True, lambda1=1.0
         )
 
         losses, metrics = model.train(
-            x, 10000, batch_size=64, sample_interval=50,
+            x, 8000, batch_size=64, sample_interval=50,
             sampler=sampler, sample_number=512,
             metrics=[JSD()]
         )

@@ -9,6 +9,10 @@ from scipy.special import xlogy
 
 
 class JensenShannonDivergence(BaseMetric):
+    """
+    Estimate JSD between model's generated distribution and real distribution.
+
+    """
     def __init__(self, bandwidth=0.05, generated_sample_size=500, mg_resolution=50, boundaries=None):
         super().__init__()
         self.bandwidth = bandwidth

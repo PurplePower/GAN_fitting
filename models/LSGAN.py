@@ -12,6 +12,11 @@ from utils.common import random_batch_getter
 
 
 class LSGAN(BaseGAN):
+    """
+    Implementing Least Square GAN in paper Least Squares Generative Adversarial Networks, Xudong Mao, et al.
+
+    """
+
     def __init__(self, input_dim, latent_factor=5, D=None, G=None, d_optimizer=None, g_optimizer=None):
         super().__init__(input_dim, latent_factor)
         super()._setup_models(D, G, d_optimizer, g_optimizer)
@@ -47,6 +52,9 @@ class LSGAN(BaseGAN):
 
     @tf.function
     def _train_step_both(self, x_real):
+        """
+        Train both D and G.
+        """
         batch_size = x_real.shape[0]
         true_labels, fake_labels = tf.ones([batch_size]), tf.zeros([batch_size])
         noise = tf.random.normal([batch_size, self.latent_factor])
@@ -69,6 +77,9 @@ class LSGAN(BaseGAN):
 
     @tf.function
     def _train_step_discriminator(self, x_real):
+        """
+        Train D only.
+        """
         batch_size = x_real.shape[0]
         true_labels, fake_labels = tf.ones([batch_size]), tf.zeros([batch_size])
         noise = tf.random.normal([batch_size, self.latent_factor])

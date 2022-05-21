@@ -8,6 +8,11 @@ from visualizers.BaseSampler import BaseSampler
 
 
 class GAN_Tensor(GAN):
+    """
+    [Deprecated]
+    Test for faster training.
+
+    """
 
     def _make_tf_dataset(self, x):
         # TODO: check type(x)

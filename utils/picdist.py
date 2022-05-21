@@ -6,7 +6,7 @@ def image2dots(
         img: Image.Image, n_samples,
         canvas_width=2.0, canvas_height=2.0, std=0.02, centered=True):
     """
-    Convert a gray scale image to dots with coordinates.
+    Convert a gray scale image to dots.
 
     """
 

@@ -1,3 +1,11 @@
+"""
+Define some common structures for D and G.
+
+Adding a new structure adds a new function
+and its name in STRUCTURE_NAMES.
+"""
+
+
 import tensorflow as tf
 from tensorflow import keras
 from keras.layers import Dense, LeakyReLU, GaussianNoise, BatchNormalization

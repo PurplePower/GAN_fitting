@@ -13,8 +13,21 @@ from utils import save
 
 
 class BaseGAN(abc.ABC):
+    """
+    BaseGAN is an abstract class for all GANs. It defines interfaces for constructing,
+    training, save & load, generating and inspecting.
+
+    Some functions offer default implementation, override them if needed.
+
+    Basically a GAN has Discriminator, Generator, and their optimizers.
+    """
 
     def __init__(self, input_dim, latent_factor):
+        """
+
+        :param input_dim: Dimensions of data to fit.
+        :param latent_factor:
+        """
         assert input_dim > 0 and latent_factor > 0
         # dimensionality of generated points, or input to D
         self.input_dim = input_dim
@@ -28,6 +41,14 @@ class BaseGAN(abc.ABC):
         pass
 
     def _setup_models(self, D=None, G=None, d_optimizer=None, g_optimizer=None):
+        """
+        If D or G 's model is not given, use self._build_* to get a default model.
+        :param D: A tf.keras.Sequential model
+        :param G: A tf.keras.Sequential model
+        :param d_optimizer: A tf.keras.optimizers.Optimizer
+        :param g_optimizer: A tf.keras.optimizers.Optimizer
+        :return:
+        """
         self.discriminator = D if D is not None else self._build_discriminator()
         self.generator = G if G is not None else self._build_generator()
         self.d_optimizer = d_optimizer if d_optimizer is not None else self._build_d_optimizer()
@@ -54,8 +75,21 @@ class BaseGAN(abc.ABC):
     ###############################################
 
     @abc.abstractmethod
-    def train(self, dataset, epochs, batch_size=32, sample_interval=20,
-              sampler: BaseSampler = None, sample_number=300, metrics=None) -> Tuple[np.ndarray, np.ndarray]:
+    def train(
+            self, dataset, epochs, batch_size=64, sample_interval=20,
+            sampler: BaseSampler = None, sample_number=300, metrics=None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        See specific GAN's implementation.
+        :param dataset: tf.Tensor or np.ndarray
+        :param epochs:
+        :param batch_size:
+        :param sample_interval:
+        :param sampler:
+        :param sample_number: number of sample points at each sampling
+        :param metrics: metrics that evaluate model at sampling
+        :return: losses of shape (epochs, 2) in form of (D loss, G loss), and metric values
+        """
         pass
 
     @staticmethod
@@ -104,12 +138,13 @@ class BaseGAN(abc.ABC):
         :param sample_points: points where probability is estimated.
         :return:
         """
-        return np.array(self.generator(sample_points, training=False))
+        return np.array(self.discriminator(sample_points, training=False))
 
     ################################################
     #       Loading and Saving
     ################################################
 
+    # model saving & loading filenames
     MAIN_MODEL_FILE = 'main_model'
     G_OPT_FILE = 'g_opt'
     D_OPT_FILE = 'd_opt'
@@ -117,6 +152,14 @@ class BaseGAN(abc.ABC):
     D_MODEL_DIR = 'discriminator'
 
     def save(self, path):
+        """
+        Save the model to a folder. GAN model is saved in two steps:
+
+        first non tensorflow objects are saved by pickle;
+
+        then tensorflow objects are saved: Sequential models are saved by
+        Sequential.save(), optimizers are saved by utils.save.save_optimizer()
+        """
         if isinstance(path, str):
             path = Path(path)
         path.mkdir(parents=True, exist_ok=True)

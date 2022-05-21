@@ -6,6 +6,8 @@ from pathlib import Path
 
 
 def save_optimizer(opt: keras.optimizers.Optimizer, path, filename):
+    # opt.get_config() helps construct an optimizer of the same type but fresh weights.
+    # opt.get_weights() stores the weights
     data = {
         'config': opt.get_config() if opt else None,
         'weights': opt.get_weights() if opt else None
@@ -30,6 +32,7 @@ def load_optimizer(path, filename, model) -> keras.optimizers.Optimizer:
 
     opt = keras.optimizers.get(data['config']['name']).from_config(data['config'])
 
+    # before apply_gradients(), opt's weights is an empty list, set_weights() will fail
     # apply zero-grad to shape its weights correctly
     shape_weights = [tf.Variable(tf.zeros_like(w)) for w in model.trainable_variables]
     zero_grads = [tf.zeros_like(w) for w in model.trainable_variables]

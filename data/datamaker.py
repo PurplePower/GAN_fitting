@@ -1,10 +1,13 @@
 import matplotlib.patches
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.datasets import make_blobs, make_circles
+from sklearn.datasets import make_blobs, make_swiss_roll
 from typing import Union
+from PIL import Image
 
 from visualizers.BaseSampler import BaseSampler
+from visualizers.ScatterSampler import ScatterSampler
+from utils.picdist import image2dots
 
 DEFAULT_SAVE_PATH = 'pics'
 
@@ -115,6 +118,9 @@ def make_mog(
 
 
 def make_ring_dots(n_samples: Union[int, list, np.ndarray], radius=2.0, path=DEFAULT_SAVE_PATH):
+    """
+    8-mode mog
+    """
     centers = np.array([
         (radius * np.cos(theta := 2 * np.pi * (i / 8)), radius * np.sin(theta))
         for i in range(8)
@@ -136,6 +142,17 @@ def make_ring_dots(n_samples: Union[int, list, np.ndarray], radius=2.0, path=DEF
     x, sampler = make_mog(n_samples, centers, path=path)
     sampler.name = 'Eight Mode mog'
     return x, sampler
+
+
+def make_25_mog(n_samples: Union[int, list, np.ndarray], std=0.07, width=4.0, path=DEFAULT_SAVE_PATH):
+    # make 5 * 5 grid centers
+    xx = np.mgrid[-(width / 2):width / 2:5j]
+    centers = np.array([
+        (i, j)
+        for j in xx for i in xx
+    ])
+
+    return make_mog(n_samples, centers, std, path)
 
 
 def make_single_circle(n_samples: int, radius=2.0, std=0.1, path=DEFAULT_SAVE_PATH):
@@ -187,3 +204,44 @@ def make_sun(n_samples: int, radius_mog=2.0, radius_circle=1.0, path=DEFAULT_SAV
             plt.title(f'Generated at epoch {epoch}')
 
     return points.astype(np.float32), _sampler()
+
+
+def make_from_image(n_samples: int, impath, path=DEFAULT_SAVE_PATH, canvas_len=4.0):
+    """
+    Load an image as gray scale and binarize it. Return points that are above the threshold.
+    :param n_samples:
+    :param impath:
+    :param path:
+    :param canvas_len:
+    :return:
+    """
+    im = Image.open(impath)
+    im = im.resize((64, 64))
+    x = image2dots(im, n_samples, canvas_width=canvas_len, canvas_height=canvas_len)
+
+    sampler = ScatterSampler(path, 'Image')
+    sampler.xlim = sampler.ylim = (-(canvas_len / 2 * 1.1), canvas_len / 2 * 1.1)
+
+    return x, sampler
+
+
+def make_swiss_roll_2d(n_samples: int, noise=0.1, width=4.0, path=DEFAULT_SAVE_PATH):
+    x, _ = make_swiss_roll(n_samples, noise=noise)  # 3D points
+
+    x = x[:, [0, 2]]  # only x and z
+
+    # centering
+    shift = (np.max(x[:, 0]) + np.min(x[:, 0])) / 2
+    x[:, 0] -= shift
+
+    shift = (np.max(x[:, 1]) + np.min(x[:, 1])) / 2
+    x[:, 1] -= shift
+
+    # scale to canvas
+    x[:, 0] *= width / (np.max(x[:, 0]) - np.min(x[:, 0]))
+    x[:, 1] *= width / (np.max(x[:, 1]) - np.min(x[:, 1]))
+
+    sampler = ScatterSampler(path, 'Swiss Roll 2D')
+    sampler.xlim = sampler.ylim = (-(width / 2 * 1.1), width / 2 * 1.1)
+
+    return x.astype(np.float32), sampler

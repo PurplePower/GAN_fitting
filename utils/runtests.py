@@ -6,17 +6,22 @@ import json
 from models import *
 from utils.common import empty_directory
 from utils.save import convert_numpy_types_to_natives
+from utils.structures import STRUCTURE_NAMES
 
 
 class ModelGetter:
-    def __init__(self, input_dim, latent_factor, lr_d, lr_g):
+    def __init__(self, input_dim, latent_factor, lr_d, lr_g, tp={}):
         self.input_dim = input_dim
         self.latent_factor = latent_factor
         self.lr_d, self.lr_g = lr_d, lr_g
+        self.training_params = tp.copy()
 
     @abc.abstractmethod
     def get(self, structure, *args, **kwargs) -> BaseGAN:
         pass
+
+    def get_params(self):
+        return self.training_params
 
 
 class Info:
@@ -56,7 +61,7 @@ class Info:
         # BaseGAN info
         info = Info()
         info.__dict__['model'] = convert_numpy_types_to_natives(model.get_config())
-        info.struct = structure
+        info.struct = structure if type(structure) is str else STRUCTURE_NAMES[structure]
         info.batch_sz, info.dg_r = batch_sz, dg_r
         return info
 

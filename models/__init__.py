@@ -7,3 +7,4 @@ from .KernelGAN import KernelGAN, CustomStairBandwidth
 from .fGAN import fGAN
 from .GAN_Tensor import GAN_Tensor
 from .SWG import SWG
+from .SWGAN import SWGAN

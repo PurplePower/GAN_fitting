@@ -10,9 +10,15 @@ import matplotlib.pyplot as plt
 
 
 class BaseSampler(abc.ABC):
+    """
+    Plot a figure for given data and save it to preset path with preset formats.
+
+    """
+
+    DEFAULT_FORMATS = ['png', 'svg']
 
     def __init__(
-            self, path=None, name='', formats='png',
+            self, path=None, name='', formats=DEFAULT_FORMATS,
             xlim=None, ylim=None
     ):
         """
@@ -25,7 +31,7 @@ class BaseSampler(abc.ABC):
         self.name = name
         self.figure = None
         self.axes = None
-        self.formats = formats
+        self.formats = formats  # figure formats to save
         self.xlim, self.ylim = xlim, ylim
         plt.ioff()
 

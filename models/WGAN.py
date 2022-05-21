@@ -11,6 +11,14 @@ from utils.common import random_batch_getter
 
 
 class WGAN(BaseGAN):
+    """
+    Implements WGAN-GP described in Wasserstein GAN and Improved Training of Wasserstein GANs.
+
+    Gradient penalty uses linear interpolate between real and fake data. Some researches prove
+    points around real data is enough, i.e. x_real + tf.random(...).
+
+    """
+
     def __init__(self, input_dim, latent_factor=5, D=None, G=None, d_optimizer=None, g_optimizer=None):
         super().__init__(input_dim, latent_factor)
         super()._setup_models(D, G, d_optimizer, g_optimizer)
@@ -41,8 +49,12 @@ class WGAN(BaseGAN):
 
     @tf.function
     def _gradient_penalty(self, x_real, x_fake):
+        """
+        Gradient penalty is computed as D's gradients to interpolated points.
+        """
         batchsz = x_real.shape[0]
 
+        # linearly interpolate between real and fake data
         t = tf.random.uniform([batchsz, 1])
         interpolate = t * x_real
         interpolate += (1 - t) * x_fake
@@ -66,7 +78,6 @@ class WGAN(BaseGAN):
 
             gp = self._gradient_penalty(x_real, x_fake)
 
-            # TODO: combine as one
             d_fake_logits = discriminator(x_fake, training=True)
             d_real_logits = discriminator(x_real, training=True)
 

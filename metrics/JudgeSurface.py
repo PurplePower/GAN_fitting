@@ -6,6 +6,10 @@ from visualizers.plots import plot_2d_discriminator_judge_area, determine_bounda
 
 
 class JudgeSurface(BaseMetric):
+    """
+    Plot discriminator's output surface.
+    """
+
     def __init__(self, path, resolution=100):
         super(JudgeSurface, self).__init__()
         plt.ioff()

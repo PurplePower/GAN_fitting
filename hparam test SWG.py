@@ -50,12 +50,14 @@ if __name__ == '__main__':
     batch_size = 64
 
     # variables
-    structures = [level_3_structure]
+    # structures = [level_3_structure]
+    structures = [level_1_structure, level_2_structure]
+
     """
     Extremely unstable to use structure 3 with 1e-3 lr
     """
     learning_rates = [(1e-4, 1e-4)]
-    n_directions = [100, 1000]
+    n_directions = [100]
     lambdas = [1.0]
 
     # make getters
