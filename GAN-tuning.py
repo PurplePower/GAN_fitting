@@ -13,7 +13,7 @@ from utils.structures import *
 from visualizers.plots import plot_2d_density, plot_2d_discriminator_judge_area
 
 if __name__ == '__main__':
-    model_type = SWG
+    model_type = SWGAN
     save_path = f'pics/{model_type.__name__.lower()}'
     empty_directory(save_path)
     # x, sampler = make_cross_line_points(1024, k=3, path=save_path)
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     # dataset = tf.data.Dataset.from_tensor_slices(x)
 
     latent_factor = 5
-    D, G = level_4_structure(2, latent_factor)
+    D, G = level_3a_structure(2, latent_factor)
     gan = None
 
     if model_type is GAN:
@@ -86,16 +86,23 @@ if __name__ == '__main__':
             divergence='pearson-chi-square'
         )
     elif model_type is SWG:
+        # lr = PiecewiseConstantDecay([5000, 7000], [1e-4, 5e-5, 1e-5])
+        ipe = n_samples // 64  # scale lr
         gan = SWG(
             2, latent_factor, D=D, G=G,
             # d_optimizer=SGD(1e-0), g_optimizer=SGD(1e-0),
-            d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
-            use_discriminator=True, n_directions=1024,
+            # d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
+            d_optimizer=Adam(PiecewiseConstantDecay([5000 * ipe, 7000 * ipe], [1e-4, 5e-5, 1e-5])),
+            g_optimizer=Adam(PiecewiseConstantDecay([5000 * ipe, 7000 * ipe], [1e-4, 5e-5, 1e-5])),
+            use_discriminator=True, n_directions=128,
         )
     elif model_type is SWGAN:
+        ipe = n_samples // 64  # scale lr
         gan = SWGAN(
             2, latent_factor, D=D, G=G,
-            d_optimizer=Adam(1e-5), g_optimizer=Adam(1e-5),
+            # d_optimizer=Adam(1e-5), g_optimizer=Adam(1e-5),
+            d_optimizer=Adam(PiecewiseConstantDecay([5000 * ipe, 7000 * ipe], [1e-4, 5e-5, 1e-5])),
+            g_optimizer=Adam(PiecewiseConstantDecay([5000 * ipe, 7000 * ipe], [1e-4, 5e-5, 1e-5])),
             lambda1=1.0, lambda2=1.0
         )
     else:
@@ -110,10 +117,11 @@ if __name__ == '__main__':
             sampler=sampler, sample_number=512,
             metrics=[JSD()])
     else:
+        jsf = JudgeSurface(save_path + '/surfaces')
         losses, metrics = gan.train(
-            x, 5000, batch_size=64, sample_interval=sample_interval,
-            sampler=sampler, sample_number=512, dg_train_ratio=3,
-            metrics=[JSD(), JudgeSurface(save_path + '/surfaces')])
+            x, 10000, batch_size=64, sample_interval=sample_interval,
+            sampler=sampler, sample_number=512, dg_train_ratio=1,
+            metrics=[JSD(), jsf])
 
     # tf.profiler.experimental.stop()
     empty_directory(save_path + '/model')

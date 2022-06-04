@@ -1,5 +1,7 @@
 # GAN-based low dimensional data fitting
 
+https://github.com/PurplePower/GAN_fitting
+
 # 基于GAN的低维数据拟合
 
 该项目实现了多个GAN的变种，并针对二维数据进行拟合及可视化，以便进行分析。
@@ -26,6 +28,8 @@ Ishan Deshpande et al.` and `Sliced Wasserstein Generative  Models, Jiqing Wu et
 在 `models/` 下实现， 由 `BaseGAN` 定义接口。
 构造 GAN 时可以给定 D 和 G 的 `keras.Sequential`模型，或给 `None` 使用默认。
 不同GAN变种的构造参数见实现。
+
+`_build_d_optimizer()`等`_build_**`函数给定最基础的结构，或合适学习率的 `Optimizer`。
 
 `train(...)`方法拟合给定数据集，返回每个迭代轮次的 D 和 G 的损失函数，及给定的 metrics 计算值。
 

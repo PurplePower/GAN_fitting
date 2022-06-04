@@ -93,7 +93,7 @@ class SWG(BaseGAN):
 
         with tf.GradientTape() as tape:
             tape.watch([interpolate])
-            d_interpolate_logits = self.discriminator(interpolate)
+            d_interpolate_logits = self.discriminator(interpolate)[1]
 
         grads = tape.gradient(d_interpolate_logits, interpolate)
         return tf.reduce_mean(tf.square(tf.norm(grads, axis=1) - 1.0))

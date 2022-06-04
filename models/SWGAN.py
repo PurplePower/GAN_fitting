@@ -19,7 +19,9 @@ class SWGAN(BaseGAN):
 
     Using orthogonal projection and update in Stiefel manifold.
 
+    !!!!!!!!
     [Currently Deprecated] unstable training.
+    Implementation may be buggy or wrong. See the implementation in the paper.
 
     """
 
@@ -50,6 +52,7 @@ class SWGAN(BaseGAN):
         self.swd_blocks = [
             tf.Variable(
                 np.linalg.svd(np.random.normal(0, 1, (self.feat_dim, self.feat_dim)))[0],
+                # np.random.normal(0, 1, (self.feat_dim, self.feat_dim)),
                 dtype=tf.float32,
                 name=f'{self._swd_name_pfx}{i}'
             )
@@ -84,12 +87,14 @@ class SWGAN(BaseGAN):
             x_fake = generator(z, training=True)
 
             # encode to features
+            # shape is n_samples, n_feat
             real_feat = discriminator(x_real, training=True)
             fake_feat = discriminator(x_fake, training=True)
 
             # SWD blocks
-            disc_real = tf.reduce_mean(self._swd_blocks_compute(real_feat), axis=1)
-            disc_fake = tf.reduce_mean(self._swd_blocks_compute(fake_feat), axis=1)
+            # average over n_samples
+            disc_real = tf.reduce_mean(self._swd_blocks_compute(real_feat), axis=0)
+            disc_fake = tf.reduce_mean(self._swd_blocks_compute(fake_feat), axis=0)
 
             # losses
             disc_loss = tf.reduce_mean(disc_real) - tf.reduce_mean(disc_fake)
@@ -153,17 +158,14 @@ class SWGAN(BaseGAN):
 
     @tf.function
     def _gradient_penalty_2(self, real_feat, fake_feat):
-        t = tf.random.uniform([real_feat.shape[0], 1])
-
         with tf.GradientTape() as tape:
+            t = tf.random.uniform([real_feat.shape[0], 1])
             interpolated = real_feat * t + fake_feat * (1 - t)
             tape.watch([interpolated])
-            activated = self._swd_blocks_compute(interpolated)
+            activated = tf.reduce_mean(self._swd_blocks_compute(interpolated))
 
         grad = tape.gradient(activated, interpolated)
         return tf.reduce_mean(tf.square(grad - 0.001))
-
-
 
     def train(
             self, dataset, epochs, batch_size=64,

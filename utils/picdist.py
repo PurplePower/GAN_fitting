@@ -11,7 +11,7 @@ def image2dots(
     """
 
     # to gray scale and make binary
-    img = ImageOps.flip(img)    # upside down
+    img = ImageOps.flip(img)  # upside down
     pixels = np.array(img.convert('L'))
     pixels = pixels <= 127  # black pixels converted to 1
     points = np.argwhere(pixels)
@@ -26,12 +26,15 @@ def image2dots(
     points[:, [0, 1]] = points[:, [1, 0]]  # swap columns
 
     # round to nearest n samples
-    n_multiples = n_samples // points.shape[0]
-    if n_samples - (n_multiples * points.shape[0]) > \
-            (n_multiples + 1) * points.shape[0] - n_samples:
-        n_multiples += 1
+    if n_samples >= points.shape[0]:
+        n_multiples = n_samples // points.shape[0]
+        if n_samples - (n_multiples * points.shape[0]) > \
+                (n_multiples + 1) * points.shape[0] - n_samples:
+            n_multiples += 1
 
-    points = np.tile(points, [n_multiples, 1])  # stack at axis 0
+        points = np.tile(points, [n_multiples, 1])  # stack at axis 0
+    else:
+        pass  # keep points as it is
 
     # add noise
     points = points + np.random.normal(0, scale=std, size=points.shape)

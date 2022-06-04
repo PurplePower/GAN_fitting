@@ -21,8 +21,12 @@ if __name__ == '__main__':
     empty_directory(save_path)
 
     # read image and convert to dataset
+    # canvas_length = 4.0
+    # im = Image.open('pics/wgan_text.png')
+    # im = im.resize((64, 64))
+
     canvas_length = 4.0
-    im = Image.open('pics/wgan_text.png')
+    im = Image.open('pics/南.png')
     im = im.resize((64, 64))
     x = image2dots(im, 1024, canvas_width=canvas_length, canvas_height=canvas_length)
     n_samples = x.shape[0]
@@ -46,21 +50,21 @@ if __name__ == '__main__':
 
     # build model and training
     latent_factor = 16
-    D, G = level_4_structure(2, latent_factor)
+    D, G = level_5_structure(2, latent_factor)
     model_type = SWG
 
     if model_type is WGAN:
-        epochs = 3200
+        epochs = 10000
         model = WGAN(
             2, latent_factor, D=D, G=G,
-            # d_optimizer=RMSprop(), g_optimizer=RMSprop()
-            d_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
-            g_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
+            d_optimizer=RMSprop(), g_optimizer=RMSprop()
+            # d_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
+            # g_optimizer=SGD(ExponentialDecay(1e-2, 4000, 0.1)),
             # d_optimizer=SGD(1e-2), g_optimizer=SGD(1e-2)
         )
         losses, metrics = model.train(
             x, epochs, batch_size=64,
-            sample_number=512, sampler=sampler, sample_interval=50,
+            sample_number=1024, sampler=sampler, sample_interval=20,
             dg_train_ratio=5, metrics=[JSD(), surface_sampler]
         )
     elif model_type is KernelGAN:
@@ -111,14 +115,14 @@ if __name__ == '__main__':
         model = SWG(
             2, latent_factor, D=D, G=G,
             d_optimizer=Adam(1e-4), g_optimizer=Adam(1e-4),
-            n_directions=100,
+            n_directions=256,
             use_discriminator=True, lambda1=1.0
         )
 
         losses, metrics = model.train(
-            x, 8000, batch_size=64, sample_interval=50,
-            sampler=sampler, sample_number=512,
-            metrics=[JSD()]
+            x, 10000, batch_size=128, sample_interval=50,
+            sampler=sampler, sample_number=1024,
+            metrics=[JSD(), surface_sampler]
         )
     else:
         raise Exception()
